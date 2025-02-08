@@ -58,6 +58,7 @@ export const toolParamNames = [
 	"operations",
 	"mode",
 	"message",
+	"toolInvocationToken",
 ] as const
 
 export type ToolParamName = (typeof toolParamNames)[number]
@@ -68,6 +69,7 @@ export interface ToolUse {
 	// params is a partial record, allowing only some or none of the possible parameters to be used
 	params: Partial<Record<ToolParamName, string>>
 	partial: boolean
+	toolInvocationToken?: string
 }
 
 export interface ExecuteCommandToolUse extends ToolUse {
@@ -143,7 +145,7 @@ export interface NewTaskToolUse extends ToolUse {
 
 export interface ListVsCodeLmToolsToolUse extends ToolUse {
 	name: "list_vscode_lm_tools"
-	params: Partial<Record<ToolParamName, string>>  // No parameters required
+	params: Partial<Record<ToolParamName, string>> // No parameters required
 }
 
 export interface CallVsCodeLmToolToolUse extends ToolUse {

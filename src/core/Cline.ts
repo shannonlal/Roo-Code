@@ -73,6 +73,12 @@ type UserContent = Array<
 	Anthropic.TextBlockParam | Anthropic.ImageBlockParam | Anthropic.ToolUseBlockParam | Anthropic.ToolResultBlockParam
 >
 
+interface ToolUse {
+	name: string
+	params: Record<string, any>
+	toolInvocationToken?: string
+}
+
 export class Cline {
 	readonly taskId: string
 	api: ApiHandler
@@ -1136,6 +1142,12 @@ export class Cline {
 							const modeName = getModeBySlug(mode, customModes)?.name ?? mode
 							return `[${block.name} in ${modeName} mode: '${message}']`
 						}
+						case "list_vscode_lm_tools":
+							return `[${block.name}]`
+						case "call_vscode_lm_tool":
+							return `[${block.name} for '${block.params.tool_name}']`
+						default:
+							return `[${block.name}]`
 					}
 				}
 
@@ -2505,110 +2517,128 @@ export class Cline {
 					case "list_vscode_lm_tools": {
 						try {
 							// Get all registered VS Code LM tools
-							const tools = vscode.lm.tools;
-							
+							const tools = vscode.lm.tools
+
 							// Format tool information
-							const toolsList = tools.map(tool => ({
+							const toolsList = tools.map((tool) => ({
 								name: tool.name,
 								description: tool.description,
 								inputSchema: tool.inputSchema,
-								tags: tool.tags
-							}));
-							
+								tags: tool.tags,
+							}))
+
 							// Format the result as a readable string
-							const formattedResult = toolsList.map(tool =>
-								`Tool: ${tool.name}\n` +
-								`Description: ${tool.description}\n` +
-								`Input Schema: ${JSON.stringify(tool.inputSchema, null, 2)}\n` +
-								`Tags: ${tool.tags.join(", ")}\n`
-							).join("\n---\n");
-							
-							pushToolResult(formattedResult);
-							break;
+							const formattedResult = toolsList
+								.map(
+									(tool) =>
+										`Tool: ${tool.name}\n` +
+										`Description: ${tool.description}\n` +
+										`Input Schema: ${JSON.stringify(tool.inputSchema, null, 2)}\n` +
+										`Tags: ${tool.tags.join(", ")}\n`,
+								)
+								.join("\n---\n")
+
+							pushToolResult(formattedResult)
+							break
 						} catch (error) {
-							await handleError("listing VS Code LM tools", error);
-							break;
+							await handleError("listing VS Code LM tools", error)
+							break
 						}
 					}
 
 					case "call_vscode_lm_tool": {
-						const tool_name: string | undefined = block.params.tool_name;
-						const arguments_str: string | undefined = block.params.arguments;
-						
+						const tool_name: string | undefined = block.params.tool_name
+						const arguments_str: string | undefined = block.params.arguments
+
 						try {
 							if (block.partial) {
 								const partialMessage = JSON.stringify({
 									tool: "callVsCodeLmTool",
 									toolName: removeClosingTag("tool_name", tool_name),
-									arguments: removeClosingTag("arguments", arguments_str)
-								});
-								await this.ask("tool", partialMessage, block.partial).catch(() => {});
-								break;
+									arguments: removeClosingTag("arguments", arguments_str),
+								})
+								await this.ask("tool", partialMessage, block.partial).catch(() => {})
+								break
 							}
 
 							// Validate required parameters
 							if (!tool_name) {
-								this.consecutiveMistakeCount++;
-								pushToolResult(await this.sayAndCreateMissingParamError("call_vscode_lm_tool", "tool_name"));
-								break;
+								this.consecutiveMistakeCount++
+								pushToolResult(
+									await this.sayAndCreateMissingParamError("call_vscode_lm_tool", "tool_name"),
+								)
+								break
 							}
 
 							// Parse and validate arguments
-							let toolArguments: object | undefined;
+							let toolArguments: object | undefined
 							if (arguments_str) {
 								try {
-									toolArguments = JSON.parse(arguments_str);
+									toolArguments = JSON.parse(arguments_str)
 								} catch (error) {
-									this.consecutiveMistakeCount++;
-									await this.say("error", `Invalid JSON arguments for tool '${tool_name}'. Retrying...`);
-									pushToolResult(formatResponse.toolError(`Failed to parse arguments JSON: ${error.message}`));
-									break;
+									this.consecutiveMistakeCount++
+									await this.say(
+										"error",
+										`Invalid JSON arguments for tool '${tool_name}'. Retrying...`,
+									)
+									pushToolResult(
+										formatResponse.toolError(`Failed to parse arguments JSON: ${error.message}`),
+									)
+									break
 								}
 							}
 
-							this.consecutiveMistakeCount = 0;
+							this.consecutiveMistakeCount = 0
 
 							// Show what we're about to do
 							const completeMessage = JSON.stringify({
 								tool: "callVsCodeLmTool",
 								toolName: tool_name,
-								arguments: toolArguments
-							});
+								arguments: toolArguments,
+							})
 
-							const didApprove = await askApproval("tool", completeMessage);
+							const didApprove = await askApproval("tool", completeMessage)
 							if (!didApprove) {
-								break;
+								break
 							}
 
 							// Execute the tool
 							try {
-								const result = await vscode.lm.invokeTool(tool_name, {
-									input: toolArguments || {},
-									token: new vscode.CancellationTokenSource().token
-								});
+								const result = await vscode.lm.invokeTool(
+									tool_name,
+									{
+										input: toolArguments || {},
+										toolInvocationToken: undefined,
+									},
+									new vscode.CancellationTokenSource().token,
+								)
 
 								// Convert tool result to string format
-								let resultText = "";
-								for (const part of result.parts) {
-									if (part instanceof vscode.LanguageModelTextPart) {
-										resultText += part.value;
+								let resultText = ""
+								if (result.content) {
+									for (const part of result.content) {
+										if (part instanceof vscode.LanguageModelTextPart) {
+											resultText += part.value
+										}
 									}
 								}
 
-								pushToolResult(formatResponse.toolResult(resultText));
+								pushToolResult(formatResponse.toolResult(resultText))
 							} catch (error) {
 								if (error instanceof vscode.LanguageModelError) {
-									pushToolResult(formatResponse.toolError(
-										`VS Code LM Tool error: ${error.message}\nCode: ${error.code}`
-									));
+									pushToolResult(
+										formatResponse.toolError(
+											`VS Code LM Tool error: ${error.message}\nCode: ${error.code}`,
+										),
+									)
 								} else {
-									throw error;
+									throw error
 								}
 							}
-							break;
+							break
 						} catch (error) {
-							await handleError("executing VS Code LM tool", error);
-							break;
+							await handleError("executing VS Code LM tool", error)
+							break
 						}
 					}
 
