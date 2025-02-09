@@ -2,6 +2,7 @@
 export type ToolGroupConfig = {
 	tools: readonly string[]
 	alwaysAvailable?: boolean // Whether this group is always available and shouldn't show in prompts view
+	requireExperiment?: string // Experiment ID that must be enabled for this group to be available
 }
 
 // Map of tool slugs to their display names
@@ -47,6 +48,7 @@ export const TOOL_GROUPS: Record<string, ToolGroupConfig> = {
 	},
 	vscode_lm: {
 		tools: ["list_vscode_lm_tools", "call_vscode_lm_tool"],
+		requireExperiment: "vscodeLmTools",
 	},
 }
 

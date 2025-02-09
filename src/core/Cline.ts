@@ -63,7 +63,7 @@ import { OpenRouterHandler } from "../api/providers/openrouter"
 import { McpHub } from "../services/mcp/McpHub"
 import crypto from "crypto"
 import { insertGroups } from "./diff/insert-groups"
-import { EXPERIMENT_IDS, experiments as Experiments } from "../shared/experiments"
+import { EXPERIMENT_IDS, experiments as Experiments, experimentDefault } from "../shared/experiments"
 
 const cwd =
 	vscode.workspace.workspaceFolders?.map((folder) => folder.uri.fsPath).at(0) ?? path.join(os.homedir(), "Desktop") // may or may not exist but fs checking existence would immediately ask for permission which would be bad UX, need to come up with a better solution
@@ -1263,6 +1263,7 @@ export class Cline {
 				// Validate tool use before execution
 				const { mode, customModes } = (await this.providerRef.deref()?.getState()) ?? {}
 				try {
+					const { experiments } = (await this.providerRef.deref()?.getState()) ?? {}
 					validateToolUse(
 						block.name as ToolName,
 						mode ?? defaultModeSlug,
@@ -1271,6 +1272,7 @@ export class Cline {
 							apply_diff: this.diffEnabled,
 						},
 						block.params,
+						experiments,
 					)
 				} catch (error) {
 					this.consecutiveMistakeCount++
@@ -2513,14 +2515,22 @@ export class Cline {
 							break
 						}
 					}
-
 					case "list_vscode_lm_tools": {
 						try {
-							// Get all registered VS Code LM tools
-							const tools = vscode.lm.tools
+							// Check if experiment is enabled
+							const { experiments = experimentDefault } =
+								(await this.providerRef.deref()?.getState()) ?? {}
+							if (!Experiments.isEnabled(experiments, EXPERIMENT_IDS.VSCODE_LM_TOOLS)) {
+								pushToolResult(
+									formatResponse.toolError(
+										"VSCode LM Tools experiment is not enabled. Enable it in Settings > Advanced Settings > Experimental Features.",
+									),
+								)
+								break
+							}
 
 							// Format tool information
-							const toolsList = tools.map((tool) => ({
+							const toolsList = vscode.lm.tools.map((tool) => ({
 								name: tool.name,
 								description: tool.description,
 								inputSchema: tool.inputSchema,
@@ -2551,6 +2561,18 @@ export class Cline {
 						const arguments_str: string | undefined = block.params.arguments
 
 						try {
+							// Check if experiment is enabled
+							const { experiments = experimentDefault } =
+								(await this.providerRef.deref()?.getState()) ?? {}
+							if (!Experiments.isEnabled(experiments, EXPERIMENT_IDS.VSCODE_LM_TOOLS)) {
+								pushToolResult(
+									formatResponse.toolError(
+										"VSCode LM Tools experiment is not enabled. Enable it in Settings > Advanced Settings > Experimental Features.",
+									),
+								)
+								break
+							}
+
 							if (block.partial) {
 								const partialMessage = JSON.stringify({
 									tool: "callVsCodeLmTool",
