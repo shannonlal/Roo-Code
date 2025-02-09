@@ -53,13 +53,21 @@ export function doesFileMatchRegex(filePath: string, pattern: string): boolean {
 }
 
 // Helper to get all tools for a mode
-export function getToolsForMode(groups: readonly GroupEntry[]): string[] {
+export function getToolsForMode(groups: readonly GroupEntry[], experiments?: Record<string, boolean>): string[] {
 	const tools = new Set<string>()
 
 	// Add tools from each group
 	groups.forEach((group) => {
 		const groupName = getGroupName(group)
 		const groupConfig = TOOL_GROUPS[groupName]
+
+		// Skip group if it requires an experiment that's not enabled
+		if (groupConfig.requireExperiment && experiments) {
+			if (!experiments[groupConfig.requireExperiment]) {
+				return
+			}
+		}
+
 		groupConfig.tools.forEach((tool: string) => tools.add(tool))
 	})
 
